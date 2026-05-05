@@ -4,10 +4,10 @@
 
 # ===== CONFIGURATION PATHS =====
 # Input directory containing videos to process
-INPUT_DIR="../data_saumya/videos_raw"
+INPUT_DIR="../data_saumya/data_study4-c/Study-4c-video-set-1/"
 
 # Output directory for processed videos
-OUTPUT_DIR="../data_saumya/videos_black"
+OUTPUT_DIR="../data_saumya/data_study4-c/processed-videos/videos-set-1"
 
 # Temporary directory for intermediate files
 TEMP_DIR="/tmp"
@@ -50,17 +50,32 @@ for video in "$INPUT_DIR"/*.{mp4,MP4,avi,AVI,mov,MOV,mkv,MKV}; do
     height=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "$video")
     fps=$(ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 "$video")
 
+    # Detect audio stream in source video
+    has_audio=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_type -of csv=p=0 "$video")
+
     # Create temporary black screen videos
     temp_black_before="$TEMP_DIR/temp_black_before_${filename_no_ext}.mp4"
     temp_black_after="$TEMP_DIR/temp_black_after_${filename_no_ext}.mp4"
 
-    # Generate 0.5 second black screen for before
-    ffmpeg -f lavfi -i color=c=black:s=${width}x${height}:r=${fps}:d=0.5 \
-           -c:v libx264 -pix_fmt yuv420p "$temp_black_before" -y 2>&1 | grep -v "^frame=" || true
+    if [ -n "$has_audio" ]; then
+        # Generate black screens with silent audio to match source streams
+        ffmpeg -f lavfi -i color=c=black:s=${width}x${height}:r=${fps}:d=0.5 \
+               -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
+               -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest \
+               "$temp_black_before" -y 2>&1 | grep -v "^frame=" || true
 
-    # Generate 1 second black screen for after
-    ffmpeg -f lavfi -i color=c=black:s=${width}x${height}:r=${fps}:d=1 \
-           -c:v libx264 -pix_fmt yuv420p "$temp_black_after" -y 2>&1 | grep -v "^frame=" || true
+        ffmpeg -f lavfi -i color=c=black:s=${width}x${height}:r=${fps}:d=1 \
+               -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
+               -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest \
+               "$temp_black_after" -y 2>&1 | grep -v "^frame=" || true
+    else
+        # Generate video-only black screens
+        ffmpeg -f lavfi -i color=c=black:s=${width}x${height}:r=${fps}:d=0.5 \
+               -c:v libx264 -pix_fmt yuv420p "$temp_black_before" -y 2>&1 | grep -v "^frame=" || true
+
+        ffmpeg -f lavfi -i color=c=black:s=${width}x${height}:r=${fps}:d=1 \
+               -c:v libx264 -pix_fmt yuv420p "$temp_black_after" -y 2>&1 | grep -v "^frame=" || true
+    fi
 
     # Create concat file with absolute paths
     concat_file="$TEMP_DIR/temp_concat_${filename_no_ext}.txt"
@@ -68,8 +83,17 @@ for video in "$INPUT_DIR"/*.{mp4,MP4,avi,AVI,mov,MOV,mkv,MKV}; do
     echo "file '$(realpath "$video")'" >> "$concat_file"
     echo "file '$temp_black_after'" >> "$concat_file"
 
-    # Concatenate original video with black screen
-    ffmpeg -f concat -safe 0 -i "$concat_file" -c copy "$output" -y 2>&1 | grep -v "^frame=" || true
+    # Re-encode output to fix DTS/timestamp issues that arise when concatenating
+    # independently-encoded clips (using -c copy causes non-monotonic DTS errors)
+    if [ -n "$has_audio" ]; then
+        ffmpeg -f concat -safe 0 -i "$concat_file" \
+               -c:v libx264 -pix_fmt yuv420p -c:a aac \
+               "$output" -y 2>&1 | grep -v "^frame=" || true
+    else
+        ffmpeg -f concat -safe 0 -i "$concat_file" \
+               -c:v libx264 -pix_fmt yuv420p -an \
+               "$output" -y 2>&1 | grep -v "^frame=" || true
+    fi
 
     # Clean up temporary files
     rm -f "$temp_black_before" "$temp_black_after" "$concat_file"

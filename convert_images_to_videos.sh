@@ -16,8 +16,8 @@
 BLACK_INTRO_DURATION=0.5  # Duration of black screen at the beginning (seconds)
 IMAGE_DURATION=2          # Duration to display the image (seconds)
 BLACK_DURATION=0          # Duration to display black screen at the end (seconds)
-INPUT_FOLDER="../data_saumya/screenshots/"   # Path to folder containing input images
-OUTPUT_FOLDER="../data_saumya/videos_from_screenshots/"  # Path to folder for output videos
+INPUT_FOLDER="../data_saumya/data_study4-c/Study-4c-screenshot-set-2/"   # Path to folder containing input images
+OUTPUT_FOLDER="../data_saumya/data_study4-c/processed-videos/screenshots-set-2/"  # Path to folder for output videos
 
 # Video encoding settings
 FPS=30                    # Frames per second
